@@ -1,0 +1,5 @@
+{
+  "name": "Nasdaq 100 Thermometer",
+  "description": "A visual decision matrix for Nasdaq 100 investment planning based on PE Valuation and VIX Volatility.",
+  "requestFramePermissions": []
+}
