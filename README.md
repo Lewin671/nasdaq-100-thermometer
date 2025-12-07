@@ -20,4 +20,4 @@ A web application to monitor and analyze the Nasdaq-100 index.
 
 ## Preview
 
-![Nasdaq-100 Thermometer](public/nasdaq-plan-2025-12-07.png)
+<img src="public/nasdaq-plan-2025-12-07.png" alt="Nasdaq-100 Thermometer" width="500" style="height: auto;">
