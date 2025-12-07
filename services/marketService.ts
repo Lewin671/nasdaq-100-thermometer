@@ -3,7 +3,9 @@ import { MarketData, PeStatus, VixStatus, Language } from '../types';
 import { PE_THRESHOLDS, VIX_THRESHOLDS, DECISION_MATRIX } from '../constants';
 
 // --- Constants ---
-const FALLBACK_QQQ_EPS = 16.2; // Conservative estimate for QQQ EPS to calculate PE if API fails
+// QQQM TTM EPS (calculated from price/PE on Yahoo Finance)
+// Price: ~257.53, PE: 35.27 => EPS ≈ 7.30
+const FALLBACK_QQQM_EPS = 7.30; // Conservative estimate for QQQM EPS to calculate PE if API fails
 
 // --- Helper Functions ---
 
@@ -107,24 +109,24 @@ interface MarketMetrics {
 
 // --- Source 1: Yahoo Finance V7 Quote API (Lighter) ---
 const fetchYahooV7Data = async (): Promise<MarketMetrics | null> => {
-    const url = 'https://query2.finance.yahoo.com/v7/finance/quote?symbols=QQQ,%5EVIX';
+    const url = 'https://query2.finance.yahoo.com/v7/finance/quote?symbols=QQQM,%5EVIX';
     try {
         const data = await fetchJsonWithRetry(url);
         const results = data?.quoteResponse?.result;
         
         if (!results || !Array.isArray(results)) return null;
 
-        const qqq = results.find((r: any) => r.symbol === 'QQQ');
+        const qqqm = results.find((r: any) => r.symbol === 'QQQM');
         const vix = results.find((r: any) => r.symbol === '^VIX');
 
-        if (!qqq || !vix) return null;
+        if (!qqqm || !vix) return null;
 
         const vixVal = vix.regularMarketPrice || vix.regularMarketPreviousClose;
-        let peVal = qqq.trailingPE || qqq.forwardPE;
+        let peVal = qqqm.trailingPE || qqqm.forwardPE;
         
         // If PE is missing but Price is there, calculate it
-        if (!peVal && qqq.regularMarketPrice) {
-             peVal = qqq.regularMarketPrice / FALLBACK_QQQ_EPS;
+        if (!peVal && qqqm.regularMarketPrice) {
+             peVal = qqqm.regularMarketPrice / FALLBACK_QQQM_EPS;
         }
 
         if (peVal && vixVal) {
@@ -139,11 +141,11 @@ const fetchYahooV7Data = async (): Promise<MarketMetrics | null> => {
 // --- Source 2: Yahoo Finance V10 Summary API (Detailed) ---
 const fetchYahooV10Data = async (): Promise<MarketMetrics | null> => {
     try {
-        const qqqUrl = 'https://query1.finance.yahoo.com/v10/finance/quoteSummary/QQQ?modules=summaryDetail,defaultKeyStatistics,price,financialData';
+        const qqqmUrl = 'https://query1.finance.yahoo.com/v10/finance/quoteSummary/QQQM?modules=summaryDetail,defaultKeyStatistics,price,financialData';
         const vixUrl = 'https://query1.finance.yahoo.com/v10/finance/quoteSummary/%5EVIX?modules=price';
 
-        const [qqqJson, vixJson] = await Promise.all([
-            fetchJsonWithRetry(qqqUrl),
+        const [qqqmJson, vixJson] = await Promise.all([
+            fetchJsonWithRetry(qqqmUrl),
             fetchJsonWithRetry(vixUrl)
         ]);
 
@@ -151,18 +153,18 @@ const fetchYahooV10Data = async (): Promise<MarketMetrics | null> => {
         const vixResult = vixJson?.quoteSummary?.result?.[0]?.price;
         const vixVal = vixResult?.regularMarketPrice?.raw;
 
-        // Parse QQQ
-        const qqqResult = qqqJson?.quoteSummary?.result?.[0];
-        if (!qqqResult || !vixVal) return null;
+        // Parse QQQM
+        const qqqmResult = qqqmJson?.quoteSummary?.result?.[0];
+        if (!qqqmResult || !vixVal) return null;
 
-        let peVal = qqqResult.summaryDetail?.trailingPE?.raw;
+        let peVal = qqqmResult.summaryDetail?.trailingPE?.raw;
         
         // Calculation Fallback: Price / EPS
         if (!peVal) {
-            const price = qqqResult.price?.regularMarketPrice?.raw || qqqResult.financialData?.currentPrice?.raw;
-            const eps = qqqResult.defaultKeyStatistics?.trailingEps?.raw;
+            const price = qqqmResult.price?.regularMarketPrice?.raw || qqqmResult.financialData?.currentPrice?.raw;
+            const eps = qqqmResult.defaultKeyStatistics?.trailingEps?.raw;
             if (price) {
-                peVal = price / (eps || FALLBACK_QQQ_EPS);
+                peVal = price / (eps || FALLBACK_QQQM_EPS);
             }
         }
 
@@ -180,25 +182,25 @@ const fetchYahooV10Data = async (): Promise<MarketMetrics | null> => {
 const fetchYahooChartData = async (): Promise<MarketMetrics | null> => {
     try {
         // Fetch 1 day chart with 1 day interval just to get the meta data
-        const qqqUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/QQQ?interval=1d&range=1d';
+        const qqqmUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/QQQM?interval=1d&range=1d';
         const vixUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?interval=1d&range=1d';
 
-        const [qqqJson, vixJson] = await Promise.all([
-            fetchJsonWithRetry(qqqUrl),
+        const [qqqmJson, vixJson] = await Promise.all([
+            fetchJsonWithRetry(qqqmUrl),
             fetchJsonWithRetry(vixUrl)
         ]);
 
-        const qqqMeta = qqqJson?.chart?.result?.[0]?.meta;
+        const qqqmMeta = qqqmJson?.chart?.result?.[0]?.meta;
         const vixMeta = vixJson?.chart?.result?.[0]?.meta;
 
-        if (!qqqMeta || !vixMeta) return null;
+        if (!qqqmMeta || !vixMeta) return null;
 
-        const qqqPrice = qqqMeta.regularMarketPrice || qqqMeta.chartPreviousClose;
+        const qqqmPrice = qqqmMeta.regularMarketPrice || qqqmMeta.chartPreviousClose;
         const vixPrice = vixMeta.regularMarketPrice || vixMeta.chartPreviousClose;
 
-        if (qqqPrice && vixPrice) {
+        if (qqqmPrice && vixPrice) {
             // We have price, but no PE. Calculate it.
-            const peVal = qqqPrice / FALLBACK_QQQ_EPS;
+            const peVal = qqqmPrice / FALLBACK_QQQM_EPS;
             return { pe: parseFloat(peVal.toFixed(2)), vix: parseFloat(vixPrice.toFixed(2)) };
         }
         return null;
@@ -235,25 +237,25 @@ const fetchHistoricalMarketData = async (dateStr: string): Promise<{ pe: number;
     // Add 24h + buffer to ensure we cover the day in different timezones
     const endTimestamp = startTimestamp + 86400 + 3600; 
 
-    const qqqUrl = `https://query1.finance.yahoo.com/v8/finance/chart/QQQ?period1=${startTimestamp}&period2=${endTimestamp}&interval=1d`;
+    const qqqmUrl = `https://query1.finance.yahoo.com/v8/finance/chart/QQQM?period1=${startTimestamp}&period2=${endTimestamp}&interval=1d`;
     const vixUrl = `https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?period1=${startTimestamp}&period2=${endTimestamp}&interval=1d`;
 
-    const [qqqJson, vixJson] = await Promise.all([
-      fetchJsonWithRetry(qqqUrl),
+    const [qqqmJson, vixJson] = await Promise.all([
+      fetchJsonWithRetry(qqqmUrl),
       fetchJsonWithRetry(vixUrl)
     ]);
 
     // Check if we have quotes in the response
-    const qqqQuotes = qqqJson?.chart?.result?.[0]?.indicators?.quote?.[0];
+    const qqqmQuotes = qqqmJson?.chart?.result?.[0]?.indicators?.quote?.[0];
     const vixQuotes = vixJson?.chart?.result?.[0]?.indicators?.quote?.[0];
 
     // Get the first valid close price
-    const qqqClose = qqqQuotes?.close?.find((c: any) => c !== null);
+    const qqqmClose = qqqmQuotes?.close?.find((c: any) => c !== null);
     const vixClose = vixQuotes?.close?.find((c: any) => c !== null);
 
-    if (!qqqClose || !vixClose) return null;
+    if (!qqqmClose || !vixClose) return null;
 
-    const historicalPe = qqqClose / FALLBACK_QQQ_EPS;
+    const historicalPe = qqqmClose / FALLBACK_QQQM_EPS;
 
     return {
       pe: parseFloat(historicalPe.toFixed(2)),
@@ -311,12 +313,9 @@ export const fetchMarketData = async (dateStr: string, lang: Language): Promise<
     console.error("Fetch error caught:", e);
   }
 
-  // Graceful Fallback if API completely fails (e.g. strict firewall)
-  // We return a "safe" object so the UI doesn't crash, but flag it as simulated.
+  // 如果 API 完全失败，抛出错误
   if (!apiData) {
-      console.warn("Using fallback estimated data due to API failure");
-      apiData = { pe: 32.50, vix: 16.00 }; // Reasonable defaults for "now"
-      isEstimated = true;
+      throw new Error("Failed to fetch market data from all sources");
   }
 
   const { pe, vix } = apiData;
@@ -345,7 +344,7 @@ export const fetchMarketData = async (dateStr: string, lang: Language): Promise<
     actionSubtitle,
     analysis,
     sources: [
-        { title: 'Yahoo Finance (QQQ Quote)', uri: 'https://finance.yahoo.com/quote/QQQ' },
+        { title: 'Yahoo Finance (QQQM Quote)', uri: 'https://finance.yahoo.com/quote/QQQM' },
         { title: 'Yahoo Finance (VIX)', uri: 'https://finance.yahoo.com/quote/%5EVIX' }
     ],
     isSimulated: isEstimated && !isToday // Only show simulated tag if it's historical or explicit fallback
