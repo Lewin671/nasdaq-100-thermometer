@@ -56,49 +56,67 @@ const getActionPlan = (peStatus: PeStatus, vixStatus: VixStatus, lang: Language)
 
 // Helper to fetch via multiple proxies with retry logic
 const fetchJsonWithRetry = async (url: string) => {
-    // List of proxies to try in order
+    // List of proxies to try
     const proxyGenerators = [
         (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`, 
-        (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-        (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
         (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+        (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+        (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
     ];
 
     // Append timestamp to prevent caching
     const urlWithCacheBuster = url + (url.includes('?') ? '&' : '?') + `_t=${Date.now()}`;
 
-    for (const generator of proxyGenerators) {
+    // Helper to fetch using a single generator
+    const fetchFromProxy = async (generator: (u: string) => string) => {
         try {
+             // 5 second timeout for each proxy
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), 5000);
+
             const proxyUrl = generator(urlWithCacheBuster);
-            const response = await fetch(proxyUrl);
+            const response = await fetch(proxyUrl, { signal: controller.signal });
+            clearTimeout(id);
             
-            if (!response.ok) continue;
+            if (!response.ok) throw new Error('Network response was not ok');
             
             const text = await response.text();
+            
+            let data;
             try {
-                const data = JSON.parse(text);
-                
-                // Handle AllOrigins "get" wrapper which puts actual content in `contents`
-                if (data.contents && typeof data.contents === 'string') {
-                    try {
-                        return JSON.parse(data.contents);
-                    } catch (e) {
-                        return data.contents;
-                    }
-                }
-                
-                // Basic error check for Yahoo style errors
-                if (data.status?.error || data.chart?.error || data.quoteResponse?.error) continue;
-                
-                return data;
+                data = JSON.parse(text);
             } catch (e) {
-                continue;
+                 throw new Error('Invalid JSON');
             }
+
+            // Handle AllOrigins "get" wrapper which puts actual content in `contents`
+            if (data.contents && typeof data.contents === 'string') {
+                try {
+                    return JSON.parse(data.contents);
+                } catch (e) {
+                    return data.contents;
+                }
+            }
+            
+            // Basic error check for Yahoo style errors
+            if (data.status?.error || data.chart?.error || data.quoteResponse?.error) {
+                throw new Error('Yahoo API Error');
+            }
+            
+            return data;
         } catch (error) {
-            // console.warn(`Proxy attempt failed`, error);
+            throw error;
         }
+    };
+
+    // Use Promise.any to get the first successful response
+    try {
+        const result = await Promise.any(proxyGenerators.map(g => fetchFromProxy(g)));
+        return result;
+    } catch (aggregateError) {
+        // console.error("All proxies failed", aggregateError);
+        return null;
     }
-    return null; 
 };
 
 // Interface for our normalized internal data structure
@@ -269,8 +287,11 @@ const fetchHistoricalMarketData = async (dateStr: string): Promise<{ pe: number;
 };
 
 // --- AI Analysis Generation (Text Only) ---
+export const fetchMarketAnalysis = async (pe: number, vix: number, lang: Language): Promise<string> => {
+    if (!process.env.API_KEY) {
+        return lang === 'en' ? "Analysis unavailable (No API Key)" : "无法获取分析 (缺少API Key)";
+    }
 
-const generateAnalysisForMetrics = async (ai: GoogleGenAI, pe: number, vix: number, lang: Language): Promise<string> => {
     const langPrompt = lang === 'zh' ? 'Chinese' : 'English';
     const prompt = `
       Context: Nasdaq 100 TTM PE is ${pe}, VIX is ${vix}.
@@ -279,11 +300,17 @@ const generateAnalysisForMetrics = async (ai: GoogleGenAI, pe: number, vix: numb
       2nd sentence: Provide a direct strategic tip (Buy/Hold/Sell/Wait).
     `;
     
-    const resp = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt
-    });
-    return resp.text?.trim() || (lang === 'en' ? "Market data updated." : "市场数据已更新");
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const resp = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt
+        });
+        return resp.text?.trim() || (lang === 'en' ? "Market data updated." : "市场数据已更新");
+    } catch (e) {
+        console.error("AI Analysis failed", e);
+        return lang === 'en' ? "Analysis temporarily unavailable." : "暂时无法获取分析。";
+    }
 };
 
 
@@ -323,17 +350,8 @@ export const fetchMarketData = async (dateStr: string, lang: Language): Promise<
   const vixStatus = getVixStatus(vix);
   const { actionTitle, actionSubtitle } = getActionPlan(peStatus, vixStatus, lang);
 
-  // Generate analysis text using Gemini
-  let analysis = "";
-  if (process.env.API_KEY) {
-      try {
-          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-          analysis = await generateAnalysisForMetrics(ai, pe, vix, lang);
-      } catch (e) { console.error("AI Analysis failed", e); }
-  } else {
-    analysis = lang === 'en' ? "Analysis unavailable (No API Key)" : "无法获取分析 (缺少API Key)";
-  }
-
+  // Note: Analysis is now fetched separately to speed up initial load
+  
   return {
     date: dateStr,
     pe,
@@ -342,7 +360,7 @@ export const fetchMarketData = async (dateStr: string, lang: Language): Promise<
     vixStatus,
     actionTitle,
     actionSubtitle,
-    analysis,
+    // analysis will be filled later or left empty
     sources: [
         { title: 'Yahoo Finance (QQQM Quote)', uri: 'https://finance.yahoo.com/quote/QQQM' },
         { title: 'Yahoo Finance (VIX)', uri: 'https://finance.yahoo.com/quote/%5EVIX' }
