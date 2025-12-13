@@ -32,15 +32,16 @@ const MarketHeader: React.FC<MarketHeaderProps> = ({ data, lang }) => {
   };
 
   return (
-    <div className="bg-gradient-to-br from-indigo-900 via-purple-800 to-indigo-900 rounded-2xl shadow-xl text-white overflow-hidden relative">
+    <div className="relative rounded-3xl overflow-hidden glass-panel border border-white/20 shadow-2xl">
       {/* Background decoration */}
-      <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500 rounded-full mix-blend-overlay filter blur-3xl opacity-20 -translate-y-1/2 translate-x-1/2"></div>
-      
+      <div className="absolute top-0 right-0 w-96 h-96 bg-purple-600 rounded-full mix-blend-overlay filter blur-[100px] opacity-30 -translate-y-1/2 translate-x-1/2"></div>
+      <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-600 rounded-full mix-blend-overlay filter blur-[80px] opacity-30 translate-y-1/2 -translate-x-1/2"></div>
+
       <div className="p-6 md:p-8 relative z-10">
         <div className="text-center mb-6">
-          <h2 className="text-indigo-200 text-sm font-semibold uppercase tracking-wider mb-1">{t.title}</h2>
-          <p className="text-xs text-indigo-300 opacity-70">
-            {data.date} • {data.isSimulated ? (lang === 'en' ? 'Historical Estimate' : '历史回测估算') : t.live}
+          <h2 className="text-indigo-200 text-xs font-bold uppercase tracking-[0.2em] mb-2">{t.title}</h2>
+          <p className="text-xs text-indigo-200/60 font-mono">
+            {data.date} • {data.isSimulated ? (lang === 'en' ? 'SIMULATION' : '历史回测') : <span className="text-green-400 font-bold animate-pulse">● LIVE</span>}
           </p>
         </div>
 
@@ -53,8 +54,8 @@ const MarketHeader: React.FC<MarketHeaderProps> = ({ data, lang }) => {
             <span className="text-indigo-200 text-sm font-medium mb-2 flex items-center gap-1">
               <TrendingUp size={16} /> {t.peLabel}
             </span>
-            <span className="text-5xl font-bold tracking-tight mb-2">{data.pe}</span>
-            <span className={`${getPeBadgeColor(data.peStatus)} text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm`}>
+            <span className="text-6xl font-black tracking-tighter mb-2 bg-linear-to-b from-white to-white/70 bg-clip-text text-transparent filter drop-shadow-lg">{data.pe}</span>
+            <span className={`${getPeBadgeColor(data.peStatus)} text-white text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-lg border border-white/20`}>
               {t.statusMap[data.peStatus]}
             </span>
           </div>
@@ -64,8 +65,8 @@ const MarketHeader: React.FC<MarketHeaderProps> = ({ data, lang }) => {
             <span className="text-indigo-200 text-sm font-medium mb-2 flex items-center gap-1">
               <Activity size={16} /> {t.vixLabel}
             </span>
-            <span className="text-5xl font-bold tracking-tight mb-2">{data.vix}</span>
-            <span className={`${getVixBadgeColor(data.vixStatus)} text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm`}>
+            <span className="text-6xl font-black tracking-tighter mb-2 bg-linear-to-b from-white to-white/70 bg-clip-text text-transparent filter drop-shadow-lg">{data.vix}</span>
+            <span className={`${getVixBadgeColor(data.vixStatus)} text-white text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-lg border border-white/20`}>
               {t.statusMap[data.vixStatus]}
             </span>
           </div>
@@ -73,13 +74,13 @@ const MarketHeader: React.FC<MarketHeaderProps> = ({ data, lang }) => {
 
         {/* Action Plan */}
         <div className="text-center mt-8">
-          <p className="text-indigo-200 text-sm mb-2">{t.planLabel}</p>
-          {/* Changed text rendering to solid color for better export compatibility */}
-          <h1 className="text-6xl md:text-7xl font-black text-white drop-shadow-md tracking-tight">
+          <p className="text-indigo-100/60 text-xs font-bold uppercase tracking-widest mb-4">{t.planLabel}</p>
+          {/* Main Action Title with Text Glow */}
+          <h1 className="text-7xl md:text-8xl font-black text-transparent bg-clip-text bg-linear-to-b from-white via-white to-purple-200 drop-shadow-[0_0_30px_rgba(255,255,255,0.3)] tracking-tighter">
             {data.actionTitle}
           </h1>
-          <div className="inline-block mt-3 bg-white/10 backdrop-blur-sm rounded-full px-6 py-2 border border-white/20">
-            <p className="text-indigo-100 font-medium">
+          <div className="inline-block mt-4 bg-white/5 backdrop-blur-md rounded-2xl px-8 py-3 border border-white/10 shadow-xl">
+            <p className="text-indigo-100 font-medium text-lg">
               {data.actionSubtitle}
             </p>
           </div>
@@ -87,9 +88,9 @@ const MarketHeader: React.FC<MarketHeaderProps> = ({ data, lang }) => {
 
         {/* AI Analysis */}
         {data.analysis && (
-          <div className="mt-8 p-4 bg-black/20 rounded-lg border border-white/10 text-center">
-            <p className="text-indigo-200 text-sm italic">
-               "{data.analysis}"
+          <div className="mt-8 p-5 bg-black/30 rounded-2xl border border-white/5 text-center backdrop-blur-sm">
+            <p className="text-indigo-100/80 text-sm italic font-medium leading-relaxed">
+              "{data.analysis}"
             </p>
           </div>
         )}
